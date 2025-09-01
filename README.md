@@ -12,14 +12,14 @@ Go + log + gen = **gologen** — лёгкий, гибкий и цветной л
 - ⚙️  Гибкость: разные стили для Info, Warn, Error, Fatal
 
 ```bash
-go get github.com/mysokolsky/gologen@v0.1.0
+go get github.com/mysokolsky/gologen
 ```
 
 ## Установка
 
 1. В файлах, где будет непосредственный вызов логгера, сделать импорт:
    ```go
-   import log "github.com/mysokolsky/gologen@v0.1.0"
+   import log "github.com/mysokolsky/gologen"
    ```
 2. После этого можно вызывать логгер, например:
    ```go
