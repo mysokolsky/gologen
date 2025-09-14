@@ -1,11 +1,11 @@
-<!-- gologen v.0.1.0 - simple logger in golang,
+<!-- gologen v.0.1.1 - simple logger in golang, support async logging
 
 author: github.com/mysokolsky
 t.me/timeforpeople -->
 
 # gologen
 
-Go + log + gen = **gologen** — лёгкий, гибкий и цветной логгер для терминала на языке GO.
+Go + log + gen = **gologen** — лёгкий, гибкий и цветной логгер для терминала на языке GO с поддержкой асинхронного логгирования в консоль.
 
 - 📦  Простота: минимальная зависимость, понятное API
 - 🌈  Цвета: настраиваемые стили для timestamp, уровня и сообщения
@@ -91,7 +91,7 @@ timestamp + lvl_name + message
 ### Пример настройки
 
 ```go
-timestamp: style{attrs: []string{LightGray, Bold}},
+timestamp: style{attrs: []string{lightGray, bold}},
 ```
 
 - `LightGray` — светло-серый цвет текста  
