@@ -1,4 +1,4 @@
-// gologen v.0.1.1 - simple logger in golang,
+// gologen v.0.1.2 - simple logger in golang, async logging and graceful shutdown
 
 // author: github.com/mysokolsky
 // t.me/timeforpeople
@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -72,6 +73,9 @@ type logger struct {
 	writer  *bufio.Writer            // буфер для строки
 	ch      chan string              // канал для записи строк
 	configs map[loglevel]levelconfig // мапа для хранения настроек всех уровней логов
+
+	wg   sync.WaitGroup
+	once sync.Once // для одиночного закрытия, чтоб не было паники при повторном вызове
 }
 
 // Основная функция-конструктор, которая создаёт объект логера и записывает нужные параметры в поля
@@ -141,13 +145,17 @@ func Error(format string, args ...interface{}) {
 // Fatalf выводится и завершает программу
 func Fatalf(format string, args ...interface{}) {
 	lg.print(fatal, format, args...)
-	lg.close()
+	lg.shutdown()
 	os.Exit(1)
 }
 
-// Закрытие логгера с дожатием канала
-func (log *logger) close() {
-	close(log.ch)
+// завершение программы
+func (log *logger) shutdown() {
+	log.once.Do(func() {
+		close(log.ch) // закрываем канал один раз
+		log.wg.Wait() // ждём пока писатель дочитает
+		log.writer.Flush()
+	})
 }
 
 // возвращает строку со всеми атрибутами стиля для настройки текста в консоли
@@ -183,15 +191,19 @@ func (log *logger) print(level loglevel, format string, args ...interface{}) {
 		cfg.message.getFullAttrStyle(), " "+msg+" ", reset,
 	)
 
-	// блокирующая запись — логи не теряются
-	log.ch <- str
+	// если shutdown уже начался — просто дропаем
+	select {
+	case log.ch <- str:
+	default:
+	}
 }
 
 // run запускает горутины логгера
 func (l *logger) run() {
 
-	// писатель логов
+	l.wg.Add(1)
 	go func() {
+		defer l.wg.Done()
 		for msg := range l.ch {
 			l.writer.WriteString(msg)
 			l.writer.Flush()
@@ -203,6 +215,6 @@ func (l *logger) run() {
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 		<-sigc
-		close(l.ch)
+		l.shutdown()
 	}()
 }
