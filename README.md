@@ -1,4 +1,4 @@
-<!-- gologen v.0.1.2 - simple logger in golang, async logging and graceful shutdown
+<!-- gologen v.0.1.3 - simple logger in golang, async logging and emergency print via shutdown
 
 author: github.com/mysokolsky
 t.me/timeforpeople -->

@@ -1,4 +1,4 @@
-// gologen v.0.1.2 - simple logger in golang, async logging and graceful shutdown
+// gologen v.0.1.3 - simple logger in golang, async logging and emergency print via shutdown
 
 // author: github.com/mysokolsky
 // t.me/timeforpeople
@@ -9,11 +9,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	// "os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	// "syscall"
 	"time"
 )
 
@@ -76,8 +74,8 @@ type logger struct {
 	configs map[loglevel]levelconfig // мапа для хранения настроек всех уровней логов
 
 	wg     sync.WaitGroup
-	once   sync.Once // для одиночного закрытия, чтоб не было паники при повторном вызове
-	closed atomic.Bool
+	once   sync.Once   // для одиночного закрытия, чтоб не было паники при повторном вызове
+	closed atomic.Bool // показывает статус завершения
 }
 
 // Основная функция-конструктор, которая создаёт объект логера и записывает нужные параметры в поля
@@ -165,45 +163,12 @@ func (st *style) getFullAttrStyle() string {
 	return strings.Join(st.attrs, "")
 }
 
-// // собираем полную строку лога и выводим в консоль
-// func (log *logger) print(level loglevel, format string, args ...interface{}) {
-
-// 	// подстрока временной метки (таймстамп)
-// 	t := time.Now().Format("2006/01/02 15:04:05") + " "
-
-// 	var msg string // переменная для сборки подстроки сообщения лога
-// 	if len(args) == 0 {
-// 		msg = format
-// 	} else if strings.Contains(format, "%") {
-// 		msg = fmt.Sprintf(format, args...)
-// 	} else {
-// 		msg = strings.TrimSuffix(fmt.Sprintln(append([]interface{}{format}, args...)...), "\n")
-// 	}
-
-// 	cfg := log.configs[level] // алиас (сокращённая временная переменная для удобства)
-
-// 	// конечная строка суммируется из 3х подстрок
-// 	// каждая подстрока тоже состоит из 3х составляющих:
-// 	// 1) сначала идёт подподстрока настройки атрибутов стиля,
-// 	// 2) потом текст,
-// 	// 3) потом атрибут сброса стиля
-// 	str := fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
-// 		cfg.timestamp.getFullAttrStyle(), t, reset,
-// 		cfg.lvl_style.getFullAttrStyle(), cfg.lvl_name, reset,
-// 		cfg.message.getFullAttrStyle(), " "+msg+" ", reset,
-// 	)
-
-// 	// если shutdown уже начался — просто дропаем
-// 	select {
-// 	case log.ch <- str:
-// 	default:
-// 	}
-// }
-
+// собираем полную строку лога и выводим в консоль
 func (log *logger) format(level loglevel, format string, args ...interface{}) string {
+	// подстрока временной метки (таймстамп)
 	t := time.Now().Format("2006/01/02 15:04:05") + " "
 
-	var msg string
+	var msg string // переменная для сборки подстроки сообщения лога
 	if len(args) == 0 {
 		msg = format
 	} else if strings.Contains(format, "%") {
@@ -212,16 +177,24 @@ func (log *logger) format(level loglevel, format string, args ...interface{}) st
 		msg = strings.TrimSuffix(fmt.Sprintln(append([]interface{}{format}, args...)...), "\n")
 	}
 
-	cfg := log.configs[level]
+	cfg := log.configs[level] // алиас (сокращённая временная переменная для удобства)
 
-	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
+	// конечная строка суммируется из 3х подстрок
+	// каждая подстрока тоже состоит из 3х составляющих:
+	// 1) сначала идёт подподстрока настройки атрибутов стиля,
+	// 2) потом текст,
+	// 3) потом атрибут сброса стиля
+	str := fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
 		cfg.timestamp.getFullAttrStyle(), t, reset,
 		cfg.lvl_style.getFullAttrStyle(), cfg.lvl_name, reset,
 		cfg.message.getFullAttrStyle(), " "+msg+" ", reset,
 	)
+
+	return str
 }
 
 func (log *logger) print(level loglevel, format string, args ...interface{}) {
+
 	str := log.format(level, format, args...)
 
 	if log.closed.Load() {
@@ -248,12 +221,4 @@ func (l *logger) run() {
 			l.writer.Flush()
 		}
 	}()
-
-	// // graceful shutdown по сигналам
-	// go func() {
-	// 	sigc := make(chan os.Signal, 1)
-	// 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
-	// 	<-sigc
-	// 	l.shutdown()
-	// }()
 }
