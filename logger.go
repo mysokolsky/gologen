@@ -9,10 +9,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/signal"
+	// "os/signal"
 	"strings"
 	"sync"
-	"syscall"
+	"sync/atomic"
+	// "syscall"
 	"time"
 )
 
@@ -74,8 +75,9 @@ type logger struct {
 	ch      chan string              // канал для записи строк
 	configs map[loglevel]levelconfig // мапа для хранения настроек всех уровней логов
 
-	wg   sync.WaitGroup
-	once sync.Once // для одиночного закрытия, чтоб не было паники при повторном вызове
+	wg     sync.WaitGroup
+	once   sync.Once // для одиночного закрытия, чтоб не было паники при повторном вызове
+	closed atomic.Bool
 }
 
 // Основная функция-конструктор, которая создаёт объект логера и записывает нужные параметры в поля
@@ -149,11 +151,11 @@ func Fatalf(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
-// завершение программы
 func (log *logger) shutdown() {
 	log.once.Do(func() {
-		close(log.ch) // закрываем канал один раз
-		log.wg.Wait() // ждём пока писатель дочитает
+		log.closed.Store(true) // ставим флаг
+		close(log.ch)          // завершаем приём
+		log.wg.Wait()          // ждём писателя
 		log.writer.Flush()
 	})
 }
@@ -163,13 +165,45 @@ func (st *style) getFullAttrStyle() string {
 	return strings.Join(st.attrs, "")
 }
 
-// собираем полную строку лога и выводим в консоль
-func (log *logger) print(level loglevel, format string, args ...interface{}) {
+// // собираем полную строку лога и выводим в консоль
+// func (log *logger) print(level loglevel, format string, args ...interface{}) {
 
-	// подстрока временной метки (таймстамп)
+// 	// подстрока временной метки (таймстамп)
+// 	t := time.Now().Format("2006/01/02 15:04:05") + " "
+
+// 	var msg string // переменная для сборки подстроки сообщения лога
+// 	if len(args) == 0 {
+// 		msg = format
+// 	} else if strings.Contains(format, "%") {
+// 		msg = fmt.Sprintf(format, args...)
+// 	} else {
+// 		msg = strings.TrimSuffix(fmt.Sprintln(append([]interface{}{format}, args...)...), "\n")
+// 	}
+
+// 	cfg := log.configs[level] // алиас (сокращённая временная переменная для удобства)
+
+// 	// конечная строка суммируется из 3х подстрок
+// 	// каждая подстрока тоже состоит из 3х составляющих:
+// 	// 1) сначала идёт подподстрока настройки атрибутов стиля,
+// 	// 2) потом текст,
+// 	// 3) потом атрибут сброса стиля
+// 	str := fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
+// 		cfg.timestamp.getFullAttrStyle(), t, reset,
+// 		cfg.lvl_style.getFullAttrStyle(), cfg.lvl_name, reset,
+// 		cfg.message.getFullAttrStyle(), " "+msg+" ", reset,
+// 	)
+
+// 	// если shutdown уже начался — просто дропаем
+// 	select {
+// 	case log.ch <- str:
+// 	default:
+// 	}
+// }
+
+func (log *logger) format(level loglevel, format string, args ...interface{}) string {
 	t := time.Now().Format("2006/01/02 15:04:05") + " "
 
-	var msg string // переменная для сборки подстроки сообщения лога
+	var msg string
 	if len(args) == 0 {
 		msg = format
 	} else if strings.Contains(format, "%") {
@@ -178,23 +212,28 @@ func (log *logger) print(level loglevel, format string, args ...interface{}) {
 		msg = strings.TrimSuffix(fmt.Sprintln(append([]interface{}{format}, args...)...), "\n")
 	}
 
-	cfg := log.configs[level] // алиас (сокращённая временная переменная для удобства)
+	cfg := log.configs[level]
 
-	// конечная строка суммируется из 3х подстрок
-	// каждая подстрока тоже состоит из 3х составляющих:
-	// 1) сначала идёт подподстрока настройки атрибутов стиля,
-	// 2) потом текст,
-	// 3) потом атрибут сброса стиля
-	str := fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s\n",
 		cfg.timestamp.getFullAttrStyle(), t, reset,
 		cfg.lvl_style.getFullAttrStyle(), cfg.lvl_name, reset,
 		cfg.message.getFullAttrStyle(), " "+msg+" ", reset,
 	)
+}
 
-	// если shutdown уже начался — просто дропаем
+func (log *logger) print(level loglevel, format string, args ...interface{}) {
+	str := log.format(level, format, args...)
+
+	if log.closed.Load() {
+		// аварийный принт в консоль — тот же формат
+		fmt.Print(str)
+		return
+	}
+
+	// обычный асинхронный режим
 	select {
 	case log.ch <- str:
-	default:
+	default: // если буфер переполнен — дропаем
 	}
 }
 
@@ -210,11 +249,11 @@ func (l *logger) run() {
 		}
 	}()
 
-	// graceful shutdown по сигналам
-	go func() {
-		sigc := make(chan os.Signal, 1)
-		signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
-		<-sigc
-		l.shutdown()
-	}()
+	// // graceful shutdown по сигналам
+	// go func() {
+	// 	sigc := make(chan os.Signal, 1)
+	// 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	// 	<-sigc
+	// 	l.shutdown()
+	// }()
 }
