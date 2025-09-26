@@ -1,4 +1,5 @@
-// gologen v.0.1.3 - simple logger in golang, async logging and emergency print via shutdown
+// gologen v.0.1.3 - simple logger in golang, async logging and emergency print via shutdown. 
+//                   Don't forget to Flush() before exit main() in sync use.
 
 // author: github.com/mysokolsky
 // t.me/timeforpeople
