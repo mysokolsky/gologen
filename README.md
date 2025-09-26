@@ -94,8 +94,8 @@ timestamp + lvl_name + message
 timestamp: style{attrs: []string{lightGray, bold}},
 ```
 
-- `LightGray` — светло-серый цвет текста  
-- `Bold` — жирное начертание
+- `lightGray` — светло-серый цвет текста  
+- `bold` — жирное начертание
 
 ### Отключение стиля
 
