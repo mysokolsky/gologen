@@ -158,6 +158,10 @@ func (log *logger) shutdown() {
 	})
 }
 
+func Flush() {
+lg.shutdown()
+}
+
 // возвращает строку со всеми атрибутами стиля для настройки текста в консоли
 func (st *style) getFullAttrStyle() string {
 	return strings.Join(st.attrs, "")
